@@ -20,18 +20,19 @@ jobs:
           node-version: 18
 
       - name: Install Dependencies
-        run: npm install axios dotenv
+        run: npm install axios dotenv node-fetch
 
-      # Step 1: Run Gemini + Prepare Post (your script should output content to stdout)
+      # Step 1: Run Gemini + Generate Post
       - name: Generate Post Content
         id: generate
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          node scripts/generateContent.js > linkedin_post.txt
+          node scripts/generateContent.js
           echo "content<<EOF" >> $GITHUB_OUTPUT
-          cat linkedin_post.txt >> $GITHUB_OUTPUT
+          cat post.txt >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+          mv post.txt linkedin_post.txt
 
       # Step 2: Save generated content as artifact (for review)
       - name: Save Post as Artifact
@@ -40,11 +41,11 @@ jobs:
           name: linkedin-post
           path: linkedin_post.txt
 
-      # Step 3: Optional Dry Run vs Real Post
+      # Step 3: Post to LinkedIn (only if enabled)
       - name: Post to LinkedIn
         if: ${{ github.event.inputs.real_post == 'true' }}
         env:
           LINKEDIN_CLIENT_ID: ${{ secrets.LINKEDIN_CLIENT_ID }}
           LINKEDIN_CLIENT_SECRET: ${{ secrets.LINKEDIN_CLIENT_SECRET }}
           LINKEDIN_ACCESS_TOKEN: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
-        run: node scripts/postToLinkedIn.js
+        run: node scripts/postToLinkedIn.js linkedin_post.txt
