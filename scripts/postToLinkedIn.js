@@ -1,54 +1,73 @@
-import axios from "axios";
-import dotenv from "dotenv";
-dotenv.config();
+import fs from "fs";
+import fetch from "node-fetch";
 
-async function generateContent() {
+async function postToLinkedIn() {
   try {
-    const prompt = "Generate a professional LinkedIn post about AI and productivity.";
-    const response = await axios.post(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + process.env.GEMINI_API_KEY,
-      {
-        contents: [{ parts: [{ text: prompt }] }],
-      }
-    );
-    return response.data.candidates[0].content.parts[0].text;
-  } catch (error) {
-    console.error("Error generating content:", error.response?.data || error.message);
-    return "Automation test post.";
-  }
-}
+    // 1. Read post content from file
+    const postText = fs.readFileSync("linkedin_post.txt", "utf-8").trim();
+    if (!postText) {
+      throw new Error("linkedin_post.txt is empty");
+    }
 
-async function postToLinkedIn(content) {
-  try {
-    const response = await axios.post(
-      "https://api.linkedin.com/v2/ugcPosts",
-      {
-        author: `urn:li:person:YOUR_LINKEDIN_USER_ID`, // Replace with your LinkedIn URN
-        lifecycleState: "PUBLISHED",
-        specificContent: {
-          "com.linkedin.ugc.ShareContent": {
-            shareCommentary: { text: content },
-            shareMediaCategory: "NONE",
+    // 2. Get access token from environment variable
+    const accessToken = process.env.LINKEDIN_ACCESS_TOKEN;
+    if (!accessToken) {
+      throw new Error("Missing LINKEDIN_ACCESS_TOKEN environment variable");
+    }
+
+    // 3. (Optional) Replace with your LinkedIn User URN or Organization URN
+    // Example: "urn:li:person:xxxxxxxx" or "urn:li:organization:xxxxxx"
+    const authorUrn = process.env.LINKEDIN_AUTHOR_URN; 
+
+    if (!authorUrn) {
+      throw new Error("Missing LINKEDIN_AUTHOR_URN environment variable");
+    }
+
+    // 4. LinkedIn API endpoint
+    const url = "https://api.linkedin.com/v2/ugcPosts";
+
+    // 5. Request body (UGC post with text only)
+    const body = {
+      author: authorUrn,
+      lifecycleState: "PUBLISHED",
+      specificContent: {
+        "com.linkedin.ugc.ShareContent": {
+          shareCommentary: {
+            text: postText,
           },
+          shareMediaCategory: "NONE",
         },
-        visibility: { "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC" },
       },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.LINKEDIN_ACCESS_TOKEN}`,
-          "X-Restli-Protocol-Version": "2.0.0",
-          "Content-Type": "application/json",
-        },
-      }
-    );
-    console.log("✅ Post published:", response.data);
-  } catch (error) {
-    console.error("❌ LinkedIn post failed:", error.response?.data || error.message);
+      visibility: {
+        "com.linkedin.ugc.MemberNetworkVisibility": "CONNECTIONS",
+      },
+    };
+
+    // 6. API call
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "X-Restli-Protocol-Version": "2.0.0",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `LinkedIn API Error: ${response.status} ${response.statusText}\n${errorText}`
+      );
+    }
+
+    const data = await response.json();
+    console.log("✅ Post published successfully:", data);
+
+  } catch (err) {
+    console.error("❌ Error posting to LinkedIn:", err.message);
+    process.exit(1);
   }
 }
 
-(async () => {
-  const content = await generateContent();
-  console.log("Generated Post:", content);
-  await postToLinkedIn(content);
-})();
+postToLinkedIn();
